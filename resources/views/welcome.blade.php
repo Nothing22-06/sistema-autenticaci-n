@@ -591,7 +591,7 @@
 
     <script>
         // Configuration
-        const API_BASE_URL = 'http://localhost:8000/api';
+        const API_BASE_URL = 'https://sistema-autenticaci-n-production.up.railway.app/api';
         let users = [];
         let filteredUsers = [];
         let currentUser = null;
