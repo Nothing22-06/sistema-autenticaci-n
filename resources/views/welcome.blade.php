@@ -305,6 +305,7 @@
         /* Form Styles */
         .form-group {
             margin-bottom: 1.5rem;
+            position: relative;
         }
 
         .form-group label {
@@ -327,6 +328,17 @@
         .form-group select:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 38px;
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.9rem;
         }
 
         /* Modal */
@@ -428,6 +440,23 @@
             display: none !important;
         }
 
+        .auth-switch {
+            text-align: center;
+            margin-top: 1rem;
+            color: #666;
+        }
+
+        .auth-switch a {
+            color: #667eea;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .auth-switch a:hover {
+            text-decoration: underline;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .header {
@@ -469,27 +498,74 @@
     <!-- Login Form -->
     <div id="loginContainer" class="login-container">
         <div class="login-box">
-            <div class="login-header">
-                <h1>Panel Administrativo</h1>
-                <p>Ingresa tus credenciales para acceder</p>
+            <!-- Login Form -->
+            <div id="loginForm">
+                <div class="login-header">
+                    <h1>Panel Administrativo</h1>
+                    <p>Ingresa tus credenciales para acceder</p>
+                </div>
+
+                <div id="loginMessage"></div>
+
+                <form id="loginFormElement">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Contraseña</label>
+                        <input type="password" id="password" name="password" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('password')">👁️</button>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="loginBtn" style="width: 100%;">
+                        <span class="btn-text">Iniciar Sesión</span>
+                        <span class="loading hidden"></span>
+                    </button>
+                </form>
+
+                <div class="auth-switch">
+                    ¿No tienes cuenta? <a onclick="showRegister()">Regístrate aquí</a>
+                </div>
             </div>
 
-            <div id="loginMessage"></div>
+            <!-- Register Form (hidden initially) -->
+            <div id="registerForm" class="hidden">
+                <div class="login-header">
+                    <h1>Crear Cuenta</h1>
+                    <p>Regístrate para acceder al panel</p>
+                </div>
 
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" required>
+                <div id="registerMessage"></div>
+
+                <form id="registerFormElement">
+                    <div class="form-group">
+                        <label for="registerName">Nombre</label>
+                        <input type="text" id="registerName" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Contraseña</label>
+                        <input type="password" id="registerPassword" name="password" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('registerPassword')">👁️</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPasswordConfirm">Confirmar Contraseña</label>
+                        <input type="password" id="registerPasswordConfirm" name="password_confirmation" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('registerPasswordConfirm')">👁️</button>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="registerBtn" style="width: 100%;">
+                        <span class="btn-text">Registrarse</span>
+                        <span class="loading hidden"></span>
+                    </button>
+                </form>
+
+                <div class="auth-switch">
+                    ¿Ya tienes cuenta? <a onclick="showLogin()">Inicia sesión aquí</a>
                 </div>
-                <div class="form-group">
-                    <label for="password">Contraseña</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <button type="submit" class="btn btn-primary" id="loginBtn" style="width: 100%;">
-                    <span class="btn-text">Iniciar Sesión</span>
-                    <span class="loading hidden"></span>
-                </button>
-            </form>
+            </div>
         </div>
     </div>
 
@@ -591,7 +667,7 @@
 
     <script>
         // Configuration
-        const API_BASE_URL = 'https://sistema-autenticaci-n-production.up.railway.app/api';
+        const API_BASE_URL = 'https://sistema-autenticaci-n-production.up.railway.app/api';         
         let users = [];
         let filteredUsers = [];
         let currentUser = null;
@@ -600,7 +676,29 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             checkAuth();
+            attachEventListeners();
         });
+
+        function attachEventListeners() {
+            // Login form
+            document.getElementById('loginFormElement').addEventListener('submit', handleLogin);
+            
+            // Register form
+            document.getElementById('registerFormElement').addEventListener('submit', handleRegister);
+            
+            // User form (for creating/editing users in dashboard)
+            document.getElementById('userForm').addEventListener('submit', handleUserForm);
+            
+            // Search users
+            document.getElementById('searchUsers').addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                filteredUsers = users.filter(user => 
+                    user.name.toLowerCase().includes(searchTerm) ||
+                    user.email.toLowerCase().includes(searchTerm)
+                );
+                renderUsersTable();
+            });
+        }
 
         // Authentication
         function checkAuth() {
@@ -627,6 +725,26 @@
                     showDashboard();
                     loadUsers();
                 } else {
+                    // Intentar renovar el token si está expirado
+                    if (result.message.includes('expired')) {
+                        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Accept': 'application/json'
+                            }
+                        });
+
+                        const refreshResult = await refreshResponse.json();
+                        
+                        if (refreshResult.success) {
+                            localStorage.setItem('jwt_token', refreshResult.authorization.token);
+                            currentUser = refreshResult.user;
+                            showDashboard();
+                            loadUsers();
+                            return;
+                        }
+                    }
                     showLogin();
                 }
             } catch (error) {
@@ -635,7 +753,7 @@
         }
 
         // Login
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        async function handleLogin(e) {
             e.preventDefault();
             
             const loginBtn = document.getElementById('loginBtn');
@@ -677,12 +795,85 @@
             } finally {
                 setLoading(loginBtn, false);
             }
-        });
+        }
+
+        // Register
+        async function handleRegister(e) {
+            e.preventDefault();
+            
+            const registerBtn = document.getElementById('registerBtn');
+            setLoading(registerBtn, true);
+            clearMessage('registerMessage');
+
+            const formData = new FormData(this);
+            const password = formData.get('password');
+            const passwordConfirm = formData.get('password_confirmation');
+            
+            // Validación de contraseñas
+            if (password !== passwordConfirm) {
+                showMessage('registerMessage', 'Las contraseñas no coinciden', 'error');
+                setLoading(registerBtn, false);
+                return;
+            }
+            
+            if (password.length < 8) {
+                showMessage('registerMessage', 'La contraseña debe tener al menos 8 caracteres', 'error');
+                setLoading(registerBtn, false);
+                return;
+            }
+
+            const data = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                password: password,
+                password_confirmation: passwordConfirm
+            };
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage('registerMessage', result.message, 'success');
+                    
+                    setTimeout(() => {
+                        showLogin();
+                    }, 1500);
+                } else {
+                    let errorMessage = result.message;
+                    if (result.errors) {
+                        errorMessage += '<br>' + Object.values(result.errors).flat().join('<br>');
+                    }
+                    showMessage('registerMessage', errorMessage, 'error');
+                }
+            } catch (error) {
+                showMessage('registerMessage', 'Error de conexión. Verifica que el servidor esté funcionando.', 'error');
+            } finally {
+                setLoading(registerBtn, false);
+            }
+        }
 
         // Show/Hide sections
         function showLogin() {
-            document.getElementById('loginContainer').style.display = 'flex';
-            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+            clearMessage('loginMessage');
+            clearMessage('registerMessage');
+        }
+
+        function showRegister() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+            clearMessage('loginMessage');
+            clearMessage('registerMessage');
         }
 
         function showDashboard() {
@@ -774,16 +965,6 @@
             });
         }
 
-        // Search users
-        document.getElementById('searchUsers').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
-            filteredUsers = users.filter(user => 
-                user.name.toLowerCase().includes(searchTerm) ||
-                user.email.toLowerCase().includes(searchTerm)
-            );
-            renderUsersTable();
-        });
-
         // Modal functions
         function openCreateModal() {
             editingUserId = null;
@@ -816,7 +997,7 @@
         }
 
         // User form submission
-        document.getElementById('userForm').addEventListener('submit', async function(e) {
+        async function handleUserForm(e) {
             e.preventDefault();
             
             const saveBtn = document.getElementById('saveUserBtn');
@@ -876,7 +1057,7 @@
             } finally {
                 setLoading(saveBtn, false);
             }
-        });
+        }
 
         // Renovar token
         async function refreshToken() {
@@ -906,51 +1087,6 @@
                 }
             } catch (error) {
                 alert('Error de conexión al renovar token');
-            }
-        }
-
-        // verificar token
-        async function verifyToken(token) {
-            try {
-                const response = await fetch(`${API_BASE_URL}/auth/me`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/json'
-                    }
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    currentUser = result.user;
-                    showDashboard();
-                    loadUsers();
-                } else {
-                    // Intentar renovar el token si está expirado
-                    if (result.message.includes('expired')) {
-                        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Accept': 'application/json'
-                            }
-                        });
-
-                        const refreshResult = await refreshResponse.json();
-                        
-                        if (refreshResult.success) {
-                            localStorage.setItem('jwt_token', refreshResult.authorization.token);
-                            currentUser = refreshResult.user;
-                            showDashboard();
-                            loadUsers();
-                            return;
-                        }
-                    }
-                    showLogin();
-                }
-            } catch (error) {
-                showLogin();
             }
         }
 
@@ -1026,6 +1162,15 @@
 
         function clearMessage(containerId) {
             document.getElementById(containerId).innerHTML = '';
+        }
+
+        function togglePassword(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (field.type === 'password') {
+                field.type = 'text';
+            } else {
+                field.type = 'password';
+            }
         }
 
         // Close modal when clicking outside
